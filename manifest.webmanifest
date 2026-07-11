@@ -1,0 +1,33 @@
+{
+  "name": "CGMS / AGP 判讀工作台",
+  "short_name": "CGMS AGP",
+  "description": "LibreView CSV 本機解析與 AGP 判讀",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f7f9",
+  "theme_color": "#177e89",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "share_target": {
+    "action": "./share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "files": [
+        {
+          "name": "csv",
+          "accept": ["text/csv", ".csv", "application/vnd.ms-excel"]
+        }
+      ]
+    }
+  }
+}
