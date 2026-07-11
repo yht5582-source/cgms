@@ -2,6 +2,8 @@
 
 這個資料夾提供一個可部署到 GitHub Pages 的 CGMS / AGP 互動網站，用於連續葡萄糖監測（CGM/CGMS）報告的本機解析、圖表、臨床分析、飲食調整重點與治療建議。
 
+另有 native iOS SwiftUI 版本位於 `ios/CGMSNative`，提供 Files picker 匯入 LibreView CSV、App Intents / Shortcuts、AGP 摘要與本機臨床建議。
+
 ## 網站功能
 
 - 上傳 LibreView CSV，於瀏覽器本機解析 FreeStyle Libre 2 glucose readings。
@@ -21,6 +23,22 @@ v1 支援兩種手機流程：
 2. 將網站安裝成 PWA 後，從手機檔案或分享選單把 CSV 分享到「CGMS AGP」，網站會接收後自動解析。
 
 PDF、手機截圖與 OCR 留待後續版本。
+
+## Native iOS 版
+
+```bash
+open ios/CGMSNative/CGMSNative.xcodeproj
+```
+
+iOS 版功能：
+
+- SwiftUI 原生介面。
+- Files picker 匯入 LibreView CSV。
+- 本機 AGP 指標計算與規則式判讀。
+- 治療藥物、CKD/透析背景與臨床報告。
+- App Intents / Shortcuts：開啟 CGMS 判讀、匯入 CGMS 資料、查看最近 AGP 摘要。
+
+目前這台環境只有 Command Line Tools，無法用 `xcodebuild` 建置 iOS target；請在安裝完整 Xcode 的 Mac 上開啟專案並選擇 iOS Simulator 或實機執行。
 
 ## 判讀順序
 
