@@ -75,11 +75,18 @@ function startServer() {
     await page.goto(url, { waitUntil: "networkidle" });
     await assert.doesNotReject(page.locator("#priorityText").waitFor({ timeout: 3000 }));
     assert.match(await page.locator("#priorityText").innerText(), /維持|先/);
+    await page.selectOption("#kidneyContext", "HD_MWF");
+    await page.locator("input[name='therapy'][value='Ryzodeg']").check();
+    await page.locator("#ryzodegBreakfastDose").fill("18");
+    await page.locator("#ryzodegDinnerDose").fill("10");
     await page.locator("#csvFile").setInputFiles(csvPath);
     await page.waitForFunction(() => document.querySelector("#readingCount")?.textContent.includes("18 筆"));
     assert.match(await page.locator("#fileStatus").innerText(), /已匯入 18 筆/);
     assert.match(await page.locator("#reportText").inputValue(), /AGP 判讀摘要/);
+    assert.match(await page.locator("#reportText").inputValue(), /Ryzodeg/);
+    assert.match(await page.locator("#reportText").inputValue(), /透析日/);
     assert.match(await page.locator("#priorityText").innerText(), /低血糖/);
+    assert.equal(await page.locator("#dialysisRail span.active").count(), 3);
     assert.ok(await page.locator("#trendChart svg").count());
     assert.ok(await page.locator("#agpChart svg").count());
 

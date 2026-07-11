@@ -16,6 +16,16 @@ const MEAL_LABELS = {
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const DIALYSIS_SCHEDULES = {
+  HD_MWF: {
+    label: "血液透析 HD 一三五",
+    days: [1, 3, 5],
+  },
+  HD_TTS: {
+    label: "血液透析 HD 二四六",
+    days: [2, 4, 6],
+  },
+};
 
 function parseCsvRows(csvText) {
   const rows = [];
@@ -140,6 +150,11 @@ function hasTherapy(profile, keyword) {
   );
 }
 
+function dialysisSchedule(profile = {}) {
+  const key = String(profile.kidneyContext || "").toUpperCase();
+  return DIALYSIS_SCHEDULES[key] ? key : null;
+}
+
 function round(valueToRound, digits = 1) {
   const factor = 10 ** digits;
   return Math.round(valueToRound * factor) / factor;
@@ -182,6 +197,19 @@ function summarizeWindow(readings, startHour, endHour) {
     .map((reading) => reading.glucoseMgDl);
 
   if (!values.length) return { count: 0, average: null, below70Percent: 0, above180Percent: 0 };
+  return {
+    count: values.length,
+    average: round(values.reduce((sum, item) => sum + item, 0) / values.length),
+    below70Percent: round((values.filter((item) => item < 70).length / values.length) * 100),
+    above180Percent: round((values.filter((item) => item > 180).length / values.length) * 100),
+  };
+}
+
+function summarizeReadings(readings) {
+  const values = readings.map((reading) => reading.glucoseMgDl);
+  if (!values.length) {
+    return { count: 0, average: null, below70Percent: 0, above180Percent: 0 };
+  }
   return {
     count: values.length,
     average: round(values.reduce((sum, item) => sum + item, 0) / values.length),
@@ -286,13 +314,17 @@ function detectMealSpike(readings, mealHour) {
   return Number.isFinite(baseline) && Number.isFinite(postMeal) && (postMeal >= 180 || postMeal - baseline >= 60);
 }
 
-function detectPatterns(readings = [], mealTimes = {}) {
+function detectPatterns(readings = [], mealTimes = {}, profile = {}) {
   const breakfast = parseHour(mealTimes.breakfast, 7.5);
   const lunch = parseHour(mealTimes.lunch, 12);
   const dinner = parseHour(mealTimes.dinner, 18);
   const nocturnal = summarizeWindow(readings, 0, 6);
   const fasting = summarizeWindow(readings, 5, 8);
   const evening = summarizeWindow(readings, 20, 24);
+  const scheduleKey = dialysisSchedule(profile);
+  const dialysisDays = scheduleKey ? DIALYSIS_SCHEDULES[scheduleKey].days : [];
+  const dialysisReadings = readings.filter((reading) => dialysisDays.includes(reading.timestamp.getDay()));
+  const nonDialysisReadings = readings.filter((reading) => scheduleKey && !dialysisDays.includes(reading.timestamp.getDay()));
 
   return {
     nocturnalLow: nocturnal.below70Percent >= 5,
@@ -302,6 +334,14 @@ function detectPatterns(readings = [], mealTimes = {}) {
     postLunchSpike: detectMealSpike(readings, lunch),
     postDinnerSpike: detectMealSpike(readings, dinner),
     lateEveningHyperglycemia: evening.above180Percent >= 30,
+    dialysisSchedule: scheduleKey,
+    dialysisScheduleLabel: scheduleKey ? DIALYSIS_SCHEDULES[scheduleKey].label : "",
+    dialysisDaySummary: scheduleKey
+      ? {
+          dialysis: summarizeReadings(dialysisReadings),
+          nonDialysis: summarizeReadings(nonDialysisReadings),
+        }
+      : null,
   };
 }
 
@@ -352,13 +392,21 @@ function buildSafetyAlerts(metrics, flags, patterns) {
   if (flags.highVariability) {
     alerts.push(`CV ${value(metrics, "cv")}% >36%，代表血糖波動偏大，治療調整要避免只追求平均值`);
   }
+  if (patterns?.dialysisDaySummary?.dialysis?.below70Percent > patterns?.dialysisDaySummary?.nonDialysis?.below70Percent + 3) {
+    alerts.push(`透析日低血糖比例 ${patterns.dialysisDaySummary.dialysis.below70Percent}% 高於非透析日 ${patterns.dialysisDaySummary.nonDialysis.below70Percent}%，需分開檢視透析前後進食與 insulin 劑量`);
+  }
   return alerts;
 }
 
 function buildPossibleCauses(profile, metrics, flags, patterns) {
   const causes = [];
+  const usesRyzodeg = hasTherapy(profile, "ryzodeg");
+  const usesPremix = hasTherapy(profile, "premixed insulin") || hasTherapy(profile, "預混");
   if (patterns?.fastingLow || patterns?.nocturnalLow) {
     causes.push("basal insulin 劑量偏高、晚餐後活動量增加、腎功能下降造成藥物作用延長，或睡前碳水不足");
+  }
+  if (usesRyzodeg || usesPremix) {
+    causes.push(`預混型胰島素/Ryzodeg 需同時對照早餐劑量 ${profile?.ryzodegBreakfastDose || "未填"}U、晚餐劑量 ${profile?.ryzodegDinnerDose || "未填"}U 與餐後尖峰；若早餐後高血糖合併午前低血糖，需避免只增加早餐劑量`);
   }
   if (hasTherapy(profile, "sulfonylurea")) {
     causes.push("sulfonylurea 在 CKD 或進食不穩時會增加低血糖風險，需特別核對用藥時間與劑量");
@@ -377,6 +425,10 @@ function buildPossibleCauses(profile, metrics, flags, patterns) {
   if (value(metrics, "averageGlucose") && value(metrics, "gmi")) {
     causes.push("平均血糖與 GMI 可用來和 HbA1c 比對；若差距明顯，需考慮貧血、CKD、輸血或紅血球壽命改變");
   }
+  if (patterns?.dialysisDaySummary) {
+    const { dialysis, nonDialysis } = patterns.dialysisDaySummary;
+    causes.push(`透析日與非透析日需分開判讀：透析日平均 ${dialysis.average ?? "無資料"} mg/dL、低血糖 ${dialysis.below70Percent}%；非透析日平均 ${nonDialysis.average ?? "無資料"} mg/dL、低血糖 ${nonDialysis.below70Percent}%`);
+  }
   return causes;
 }
 
@@ -394,6 +446,9 @@ function buildDietKeyPoints(patterns) {
   if (patterns?.nocturnalLow || patterns?.fastingLow) {
     points.push("若有夜間低血糖，飲食調整不能只減醣；需同時檢視晚餐量、睡前點心與降糖藥作用時間");
   }
+  if (patterns?.dialysisDaySummary) {
+    points.push("HD 病人請把透析日與非透析日分開記錄飲食：透析前點心、透析中進食、透析後晚餐與運動量都可能改變血糖型態");
+  }
   if (!points.length) {
     points.push("飲食重點應由 AGP 的時段尖峰決定，請補上三餐照片、份量、點心、運動與用藥時間");
   }
@@ -402,6 +457,8 @@ function buildDietKeyPoints(patterns) {
 
 function buildTreatmentSuggestions(profile, flags, patterns) {
   const suggestions = [];
+  const usesRyzodeg = hasTherapy(profile, "ryzodeg");
+  const usesPremix = hasTherapy(profile, "premixed insulin") || hasTherapy(profile, "預混");
   if (flags.hasHypoglycemia) {
     suggestions.push("治療優先順序為降低低血糖：先檢視 insulin 或促胰島素分泌藥，再談強化降糖");
   }
@@ -411,8 +468,14 @@ function buildTreatmentSuggestions(profile, flags, patterns) {
   if (hasTherapy(profile, "sulfonylurea")) {
     suggestions.push("sulfonylurea 可考慮減量、停用或改用低低血糖風險藥物，特別是 CKD、長者或進食不穩者");
   }
+  if (usesRyzodeg || usesPremix) {
+    suggestions.push(`預混型胰島素/Ryzodeg 建議依餐別與透析日分開調整：早餐 ${profile?.ryzodegBreakfastDose || "未填"}U 主要對早餐後至午餐前，晚餐 ${profile?.ryzodegDinnerDose || "未填"}U 需同時看晚餐後與夜間低血糖`);
+  }
   if (String(profile?.kidneyContext || "").toUpperCase().includes("CKD")) {
     suggestions.push("CKD 病人需依 eGFR 調整用藥，避免藥物蓄積，並把低血糖風險列為第一安全目標");
+  }
+  if (dialysisSchedule(profile)) {
+    suggestions.push(`${DIALYSIS_SCHEDULES[dialysisSchedule(profile)].label}：治療建議需分透析日與非透析日；若透析日低血糖較多，先檢視透析前餐、透析中補食與當日 insulin 劑量`);
   }
   if (flags.highTar && !flags.hasHypoglycemia) {
     suggestions.push("若低血糖少而餐後 TAR 高，可考慮強化餐前治療、調整 GLP-1 RA/SGLT2 inhibitor 適應性或餐前 insulin 策略");

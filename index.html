@@ -29,7 +29,7 @@
           <p class="status">手機使用：先從 LibreView 匯出 CSV；若已安裝成 PWA，可在檔案/分享選單分享 CSV 到本網站。</p>
         </section>
 
-        <section class="panel">
+        <section class="panel therapy-panel">
           <h2>2. 治療與背景</h2>
           <div class="field-grid">
             <label>糖尿病類型
@@ -41,18 +41,47 @@
               </select>
             </label>
             <label>CKD / 透析背景
-              <input id="kidneyContext" placeholder="例：CKD G4、HD、PD、eGFR 28">
+              <select id="kidneyContext">
+                <option value="">未指定</option>
+                <option value="CKD_G1_G2">CKD G1-G2</option>
+                <option value="CKD_G3">CKD G3</option>
+                <option value="CKD_G4">CKD G4</option>
+                <option value="CKD_G5_ND">CKD G5 未透析</option>
+                <option value="HD_MWF">HD 一三五透析</option>
+                <option value="HD_TTS">HD 二四六透析</option>
+                <option value="PD">腹膜透析 PD</option>
+                <option value="TRANSPLANT">腎臟移植後</option>
+              </select>
             </label>
+          </div>
+          <div id="dialysisRail" class="dialysis-rail" aria-label="透析班表">
+            <span data-day="1">一</span>
+            <span data-day="2">二</span>
+            <span data-day="3">三</span>
+            <span data-day="4">四</span>
+            <span data-day="5">五</span>
+            <span data-day="6">六</span>
+            <span data-day="0">日</span>
           </div>
           <fieldset>
             <legend>治療藥物</legend>
             <label><input type="checkbox" name="therapy" value="basal insulin"> basal insulin</label>
             <label><input type="checkbox" name="therapy" value="prandial insulin"> prandial insulin</label>
+            <label><input type="checkbox" name="therapy" value="premixed insulin"> 預混型胰島素</label>
+            <label><input type="checkbox" name="therapy" value="Ryzodeg"> Ryzodeg</label>
             <label><input type="checkbox" name="therapy" value="sulfonylurea"> sulfonylurea</label>
             <label><input type="checkbox" name="therapy" value="GLP-1 RA"> GLP-1 RA</label>
             <label><input type="checkbox" name="therapy" value="SGLT2 inhibitor"> SGLT2 inhibitor</label>
             <label><input type="checkbox" name="therapy" value="DPP-4 inhibitor"> DPP-4 inhibitor</label>
           </fieldset>
+          <div class="dose-grid">
+            <label>Ryzodeg 早餐劑量 (U)
+              <input id="ryzodegBreakfastDose" type="number" min="0" step="1" placeholder="例：18">
+            </label>
+            <label>Ryzodeg 晚餐劑量 (U)
+              <input id="ryzodegDinnerDose" type="number" min="0" step="1" placeholder="例：10">
+            </label>
+          </div>
           <label>補充用藥與低血糖處置
             <textarea id="therapyNotes" rows="3" placeholder="例：glargine 18U HS、早餐前 repaglinide、低血糖喝果汁"></textarea>
           </label>

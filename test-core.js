@@ -124,11 +124,15 @@ const patterns = detectPatterns(readings, {
   breakfast: "07:30",
   lunch: "12:00",
   dinner: "18:00",
+}, {
+  kidneyContext: "HD_MWF",
 });
 assert.equal(patterns.nocturnalLow, true);
 assert.equal(patterns.postBreakfastSpike, true);
 assert.equal(patterns.postDinnerSpike, true);
 assert.equal(patterns.lateEveningHyperglycemia, true);
+assert.equal(patterns.dialysisSchedule, "HD_MWF");
+assert.ok(patterns.dialysisDaySummary.dialysis.below70Percent > patterns.dialysisDaySummary.nonDialysis.below70Percent);
 
 assert.throws(
   () => parseLibreCsv("Time,Value\nnot-a-date,100"),
@@ -138,8 +142,10 @@ assert.throws(
 const report = generateClinicalReport({
   profile: {
     diabetesType: "type 2 diabetes",
-    kidneyContext: "CKD G4",
-    therapy: ["basal insulin"],
+    kidneyContext: "HD_MWF",
+    therapy: ["Ryzodeg", "premixed insulin"],
+    ryzodegBreakfastDose: 18,
+    ryzodegDinnerDose: 10,
   },
   metrics,
   patterns,
@@ -147,3 +153,5 @@ const report = generateClinicalReport({
 assert.ok(report.includes("AGP 判讀摘要"));
 assert.ok(report.includes("TIR"));
 assert.ok(report.includes("飲食調整關鍵點"));
+assert.ok(report.includes("Ryzodeg"));
+assert.ok(report.includes("透析日"));

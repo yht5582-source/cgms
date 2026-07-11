@@ -16,6 +16,8 @@
       diabetesType: $("diabetesType").value,
       kidneyContext: $("kidneyContext").value,
       therapy,
+      ryzodegBreakfastDose: Number($("ryzodegBreakfastDose").value || 0),
+      ryzodegDinnerDose: Number($("ryzodegDinnerDose").value || 0),
       lifestyleNotes: $("lifestyleNotes").value.trim(),
     };
   }
@@ -106,15 +108,16 @@
   }
 
   function renderSummary(metrics) {
+    const dialysisLabel = currentPatterns?.dialysisScheduleLabel || kidneyContextLabel(profileFromForm().kidneyContext);
     const cards = [
       ["TIR", `${metrics.tir70to180 ?? 0}%`, "70-180 mg/dL"],
       ["TBR", `${metrics.tbrBelow70 ?? 0}%`, "<70 mg/dL"],
       ["TAR", `${metrics.tarAbove180 ?? 0}%`, ">180 mg/dL"],
       ["CV", `${metrics.cv ?? 0}%`, "變異係數"],
-      ["GMI", `${metrics.gmi ?? 0}%`, "估計 A1c"],
+      ["HD/CKD", dialysisLabel || "未指定", currentPatterns?.dialysisDaySummary ? "已分透析日" : "背景"],
     ];
     $("summaryCards").innerHTML = cards
-      .map(([label, value, note]) => `<article class="metric-card"><span>${label}</span><strong>${value}</strong><span>${note}</span></article>`)
+      .map(([label, value, note]) => `<article class="metric-card ${label === "HD/CKD" ? "context-card" : ""}"><span>${label}</span><strong>${value}</strong><span>${note}</span></article>`)
       .join("");
   }
 
@@ -215,6 +218,20 @@
       .join("");
   }
 
+  function kidneyContextLabel(value) {
+    const option = [...$("kidneyContext").options].find((item) => item.value === value);
+    return option ? option.textContent : "";
+  }
+
+  function updateDialysisRail() {
+    const value = $("kidneyContext").value;
+    const activeDays = value === "HD_MWF" ? ["1", "3", "5"] : value === "HD_TTS" ? ["2", "4", "6"] : [];
+    document.querySelectorAll("#dialysisRail span").forEach((item) => {
+      item.classList.toggle("active", activeDays.includes(item.dataset.day));
+      item.classList.toggle("muted-day", activeDays.length === 0);
+    });
+  }
+
   function render(readings) {
     if (!currentMetrics || !currentAnalysis) return;
     renderSummary(currentMetrics);
@@ -228,6 +245,7 @@
     renderList("dietList", currentAnalysis.dietKeyPoints, "請補上三餐照片與點心時間。");
     renderList("treatmentList", currentAnalysis.treatmentSuggestions, "目前以追蹤與生活型態調整為主。");
     $("reportText").value = currentReport;
+    updateDialysisRail();
   }
 
   async function trySharedCsv() {
@@ -254,7 +272,7 @@
     setStatus("已使用手動 AGP 指標分析。", false);
   });
 
-  ["diabetesType", "kidneyContext", "therapyNotes", "lifestyleNotes", "breakfastTime", "lunchTime", "dinnerTime"].forEach((id) => {
+  ["diabetesType", "kidneyContext", "ryzodegBreakfastDose", "ryzodegDinnerDose", "therapyNotes", "lifestyleNotes", "breakfastTime", "lunchTime", "dinnerTime"].forEach((id) => {
     $(id).addEventListener("input", () => {
       if (currentReadings.length) {
         analyze(core.calculateAgpMetrics(currentReadings), core.detectPatterns(currentReadings, mealTimesFromForm(), profileFromForm()), currentReadings);
@@ -283,6 +301,7 @@
       metrics: currentMetrics,
       patterns: currentPatterns,
       analysis: currentAnalysis,
+      profile: profileFromForm(),
       generatedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -298,5 +317,6 @@
   }
 
   analyze(manualMetricsFromForm(), {}, []);
+  updateDialysisRail();
   trySharedCsv();
 })();
