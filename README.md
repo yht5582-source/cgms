@@ -13,6 +13,27 @@
 - 以規則式邏輯輸出可能原因、飲食調整關鍵點、治療建議與可複製臨床報告。
 - 可下載匿名 JSON 摘要；不預設上傳或儲存 PHI。
 
+## v2.0 除錯與優化（2026-10-25）
+
+- 修正：mmol/L 檔案原本血糖值變成 undefined（所有指標 NaN），現自動換算 mg/dL。
+- 修正：DD-MM-YYYY、分號/Tab 分隔、`上午/下午`、LibreView US `hh:mm AM/PM` 日期；改為手動解析，iOS Safari 不再無法讀取 `YYYY-MM-DD HH:mm`。
+- 修正：Scan 值與 15 分鐘 Historic 重複計入（掃描越多的時段權重越高）；現只補 Historic 空缺。
+- 修正：資料完整率改依實際讀值間隔（Libre 15 分、Dexcom 5 分）計算。
+- 修正：90 天匯出檔改預設取最近 14 天（可選 30/90/全部）。
+- 修正：已計算但從未使用的空腹高血糖；手動模式沿用舊 CSV 型態；報告漏掉安全警訊；分享檔案永久留在 Cache Storage。
+- 目標族群：一般 / 高齡高風險（CKD G4-5、透析自動套用，TIR >50%、TBR <1%）/ 懷孕 63-140 mg/dL。
+- 新增：metformin、HbA1c 與 GMI 比對、overbasalization（睡前到清晨降 ≥50）、午餐前低血糖、PD/移植、藥物規則（metformin eGFR、SGLT2 透析、GLP-1+DPP-4、SU 於 CKD）。
+- 圖表：5 段 TIR 堆疊、AGP 5-95% 帶並對齊小時中點、斷線顯示感測器空窗、日期刻度；離線 app shell。
+
+測試：
+
+```bash
+~/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node test-core.js
+~/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node test-ui.js
+```
+
+iOS 原生版（`ios/CGMSNative`）尚未同步 v2.0 規則。
+
 ## 手機資料取得
 
 手機瀏覽器不能在未經使用者動作下直接掃描或讀取 FreeStyle Libre 2 / LibreView App 或 Downloads 內的資料。這是 iOS/Android 與瀏覽器的隱私沙盒限制。

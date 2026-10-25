@@ -4,8 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CGMS / AGP 判讀工作台</title>
+    <meta name="description" content="LibreView CSV 本機解析，產生 AGP 圖表、TIR/TBR/TAR、飲食重點與治療建議">
+    <meta name="theme-color" content="#177e89">
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icon-180.png">
+    <link rel="stylesheet" href="styles.css?v=2.0">
   </head>
   <body>
     <header class="topbar">
@@ -20,12 +24,20 @@
       <aside class="input-panel">
         <section class="panel">
           <h2>1. 匯入 CGMS</h2>
-          <label class="file-drop" for="csvFile">
-            <span>上傳 LibreView CSV</span>
-            <small>支援 Device Timestamp、Historic/Scan Glucose mg/dL</small>
+          <label class="file-drop" for="csvFile" id="fileDrop">
+            <span>上傳或拖放 LibreView CSV</span>
+            <small>支援 Historic/Scan Glucose、mg/dL 或 mmol/L、逗號/分號分隔</small>
           </label>
-          <input id="csvFile" type="file" accept=".csv,text/csv">
-          <p id="fileStatus" class="status">尚未匯入資料，可先使用右側手動 AGP 指標。</p>
+          <input id="csvFile" type="file" accept=".csv,.txt,text/csv">
+          <label class="period-field">分析期間
+            <select id="analysisDays">
+              <option value="14" selected>最近 14 天（AGP 標準）</option>
+              <option value="30">最近 30 天</option>
+              <option value="90">最近 90 天</option>
+              <option value="0">全部資料</option>
+            </select>
+          </label>
+          <p id="fileStatus" class="status" role="status" aria-live="polite">尚未匯入資料，可先使用右側手動 AGP 指標。</p>
           <p class="status">手機使用：先從 LibreView 匯出 CSV；若已安裝成 PWA，可在檔案/分享選單分享 CSV 到本網站。</p>
         </section>
 
@@ -36,8 +48,18 @@
               <select id="diabetesType">
                 <option>type 2 diabetes</option>
                 <option>type 1 diabetes</option>
-                <option>prediabetes</option>
+                <option value="type 1 diabetes pregnancy">type 1 diabetes 懷孕</option>
+                <option value="type 2 diabetes pregnancy">type 2 diabetes 懷孕</option>
                 <option>gestational diabetes</option>
+                <option>prediabetes</option>
+              </select>
+            </label>
+            <label>目標族群
+              <select id="targetGroup">
+                <option value="">自動判斷</option>
+                <option value="standard">一般成人</option>
+                <option value="highRisk">高齡/高低血糖風險</option>
+                <option value="pregnancy">懷孕 63-140</option>
               </select>
             </label>
             <label>CKD / 透析背景
@@ -53,7 +75,11 @@
                 <option value="TRANSPLANT">腎臟移植後</option>
               </select>
             </label>
+            <label>HbA1c (%)
+              <input id="hba1c" type="number" min="3" max="20" step="0.1" placeholder="選填，與 GMI 比對">
+            </label>
           </div>
+          <p id="targetNote" class="status target-note"></p>
           <div id="dialysisRail" class="dialysis-rail" aria-label="透析班表">
             <span data-day="1">一</span>
             <span data-day="2">二</span>
@@ -69,16 +95,17 @@
             <label><input type="checkbox" name="therapy" value="prandial insulin"> prandial insulin</label>
             <label><input type="checkbox" name="therapy" value="premixed insulin"> 預混型胰島素</label>
             <label><input type="checkbox" name="therapy" value="Ryzodeg"> Ryzodeg</label>
+            <label><input type="checkbox" name="therapy" value="metformin"> metformin</label>
             <label><input type="checkbox" name="therapy" value="sulfonylurea"> sulfonylurea</label>
             <label><input type="checkbox" name="therapy" value="GLP-1 RA"> GLP-1 RA</label>
             <label><input type="checkbox" name="therapy" value="SGLT2 inhibitor"> SGLT2 inhibitor</label>
             <label><input type="checkbox" name="therapy" value="DPP-4 inhibitor"> DPP-4 inhibitor</label>
           </fieldset>
-          <div class="dose-grid">
-            <label>Ryzodeg 早餐劑量 (U)
+          <div class="dose-grid" id="doseGrid" hidden>
+            <label>預混/Ryzodeg 早餐劑量 (U)
               <input id="ryzodegBreakfastDose" type="number" min="0" step="1" placeholder="例：18">
             </label>
-            <label>Ryzodeg 晚餐劑量 (U)
+            <label>預混/Ryzodeg 晚餐劑量 (U)
               <input id="ryzodegDinnerDose" type="number" min="0" step="1" placeholder="例：10">
             </label>
           </div>
@@ -108,18 +135,19 @@
         <section class="panel">
           <h2>手動 AGP 指標</h2>
           <div class="metric-form">
-            <label>天數<input id="manualActiveDays" type="number" value="14"></label>
-            <label>Active %<input id="manualCapture" type="number" value="80"></label>
-            <label>平均<input id="manualAverage" type="number" value="160"></label>
-            <label>GMI<input id="manualGmi" type="number" step="0.1" value="7.2"></label>
-            <label>TIR<input id="manualTir" type="number" value="62"></label>
-            <label>TBR <70<input id="manualTbr70" type="number" step="0.1" value="2"></label>
-            <label>TBR <54<input id="manualTbr54" type="number" step="0.1" value="0.4"></label>
-            <label>TAR >180<input id="manualTar180" type="number" value="36"></label>
-            <label>TAR >250<input id="manualTar250" type="number" value="7"></label>
-            <label>CV<input id="manualCv" type="number" value="34"></label>
+            <label>天數<input id="manualActiveDays" type="number" min="0" value="14"></label>
+            <label>Active %<input id="manualCapture" type="number" min="0" max="100" step="0.1" value="80"></label>
+            <label>平均 mg/dL<input id="manualAverage" type="number" min="0" value="160"></label>
+            <label>GMI %<input id="manualGmi" type="number" step="0.1" value="7.1"></label>
+            <label><span id="lblTir">TIR 70-180 %</span><input id="manualTir" type="number" step="0.1" value="62"></label>
+            <label><span id="lblTbr70">TBR &lt;70 %</span><input id="manualTbr70" type="number" step="0.1" value="2"></label>
+            <label>TBR &lt;54 %<input id="manualTbr54" type="number" step="0.1" value="0.4"></label>
+            <label><span id="lblTar180">TAR &gt;180 %</span><input id="manualTar180" type="number" step="0.1" value="36"></label>
+            <label>TAR &gt;250 %<input id="manualTar250" type="number" step="0.1" value="7"></label>
+            <label>CV %<input id="manualCv" type="number" step="0.1" value="34"></label>
           </div>
-          <button id="useManual" class="secondary">使用手動指標分析</button>
+          <p class="status">輸入平均血糖會自動換算 GMI；TAR &gt;180 含 &gt;250，TBR &lt;70 含 &lt;54。</p>
+          <button id="useManual" class="secondary" type="button">使用手動指標分析</button>
         </section>
       </aside>
 
@@ -140,7 +168,7 @@
             <div id="agpChart" class="chart empty">CSV 匯入後顯示 24 小時分位帶。</div>
           </div>
           <div class="chart-panel">
-            <div class="panel-heading"><h2>TIR / TBR / TAR</h2></div>
+            <div class="panel-heading"><h2>TIR / TBR / TAR</h2><span id="targetLabel"></span></div>
             <div id="rangeChart" class="chart compact"></div>
           </div>
         </section>
@@ -170,15 +198,19 @@
         <section class="panel">
           <div class="panel-heading">
             <h2>臨床報告</h2>
-            <button id="copyReport" class="icon-button" title="複製報告">Copy</button>
+            <button id="copyReport" class="icon-button" type="button" title="複製報告">Copy</button>
           </div>
           <textarea id="reportText" rows="12" readonly></textarea>
-          <button id="downloadJson" class="secondary">下載匿名 JSON</button>
+          <button id="downloadJson" class="secondary" type="button">下載匿名 JSON</button>
         </section>
       </aside>
     </main>
 
-    <script src="core.js"></script>
-    <script src="app.js"></script>
+    <footer class="footer">
+      <p>v2.0 · 規則式臨床輔助工具，不取代醫療人員判斷；資料不會上傳。目標值依 International Consensus on Time in Range（Diabetes Care 2019;42:1593）與 ADA Standards of Care 2025 §6、§15。</p>
+    </footer>
+
+    <script src="core.js?v=2.0"></script>
+    <script src="app.js?v=2.0"></script>
   </body>
 </html>

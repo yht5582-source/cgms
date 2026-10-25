@@ -5,6 +5,18 @@ const path = require("node:path");
 const os = require("node:os");
 const { chromium } = require("/Users/YHTseng/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright");
 
+// Playwright 版本與已下載的瀏覽器不一致時，改用快取中最新的 headless shell。
+function headlessShell() {
+  if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
+  const cacheDir = path.join(os.homedir(), "Library/Caches/ms-playwright");
+  const dirs = fs.existsSync(cacheDir) ? fs.readdirSync(cacheDir).filter((name) => name.startsWith("chromium_headless_shell-")).sort().reverse() : [];
+  for (const dir of dirs) {
+    const candidate = path.join(cacheDir, dir, "chrome-headless-shell-mac-arm64/chrome-headless-shell");
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return undefined;
+}
+
 const root = __dirname;
 const sampleCsv = `Device Timestamp,Historic Glucose mg/dL,Scan Glucose mg/dL
 2026-07-01 00:00,62,
@@ -69,9 +81,12 @@ function startServer() {
   const url = targetUrl || localServer.url;
   const csvPath = path.join(os.tmpdir(), `libreview-smoke-${Date.now()}.csv`);
   fs.writeFileSync(csvPath, sampleCsv);
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, executablePath: headlessShell() });
   try {
     const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => message.type() === "error" && errors.push(message.text()));
     await page.goto(url, { waitUntil: "networkidle" });
     await assert.doesNotReject(page.locator("#priorityText").waitFor({ timeout: 3000 }));
     assert.match(await page.locator("#priorityText").innerText(), /維持|先/);
@@ -94,6 +109,28 @@ function startServer() {
     await page.waitForTimeout(100);
     const bodyWidth = await page.evaluate(() => document.body.scrollWidth);
     assert.ok(bodyWidth <= 430, `mobile layout overflowed: ${bodyWidth}`);
+
+    // 懷孕目標切換與手動模式。
+    await page.setViewportSize({ width: 1360, height: 900 });
+    await page.selectOption("#diabetesType", "gestational diabetes");
+    assert.match(await page.locator("#targetNote").innerText(), /懷孕/);
+    assert.match(await page.locator("#rangeChart").innerText(), /63-140/);
+    assert.match(await page.locator("#lblTir").innerText(), /63-140/);
+    await page.selectOption("#diabetesType", "type 2 diabetes");
+    await page.locator("#useManual").click();
+    assert.match(await page.locator("#trendChart").innerText(), /手動/);
+    assert.equal(await page.locator("#doseGrid").isVisible(), true);
+    await page.locator("input[name='therapy'][value='Ryzodeg']").uncheck();
+    assert.equal(await page.locator("#doseGrid").isVisible(), false);
+    await page.fill("#manualAverage", "154");
+    assert.equal(await page.inputValue("#manualGmi"), "7");
+    if (process.env.SHOT) {
+      await page.locator("#csvFile").setInputFiles(csvPath);
+      await page.waitForTimeout(200);
+      await page.screenshot({ path: process.env.SHOT, fullPage: true });
+    }
+    assert.deepEqual(errors, []);
+    console.log("test-ui: all assertions passed");
   } finally {
     await browser.close();
     if (localServer) localServer.server.close();
